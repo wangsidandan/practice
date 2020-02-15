@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>vuex + axios + vue</title>
+	<!-- 导入vue -->
+	<script src="https://cdn.bootcss.com/vue/2.6.10/vue.js"></script>
+	<script src="https://cdn.bootcss.com/vuex/3.1.1/vuex.js"></script>
+	<script src="https://cdn.bootcss.com/axios/0.19.0-beta.1/axios.js"></script>
+	<script src="https://cdn.bootcss.com/jquery/3.4.1/jquery.min.js"></script>
+</head>
+<body>
+	<div id="app">
+		<h2>顾客管理</h2>
+		<!-- 按钮 -->
+		<div class="btns">
+			<button @click="toAddHandler">添加</button>
+			<button @click="toBatchDeleteHandler">批量删除</button>
+		</div>
+		<!-- /按钮 -->
+		<!-- 表单 -->
+		<form action="" v-show="visible" @submit.prevent="submitHandler">
+			姓名<input type="text" v-model="form.username">
+			手机<input type="text" v-model="form.telephone">
+			<input type="submit" value="提交">
+			<input type="reset" value="取消" @click="closeModal">
+		</form>
+		<!-- /表单 -->
+		<!-- 表格 -->
+		<table>
+			<thead>
+				<tr>
+					<th>编号</th>
+					<th>姓名</th>
+					<th>手机号</th>
+					<th>状态</th>
+					<th>操作</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr v-for="c in customers">
+					<td>{{c.id}}</td>
+					<td>{{c.username}}</td>
+					<td>{{c.telephone}}</td>
+					<td>{{c.status}}</td>
+					<td>
+						<a href="" @click.prevent = "deleteHandler(c.id)">删除</a>
+						<a href="" @click.prevent = "editHandler(c)">修改</a>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+		<!-- /表格 -->
+	</div>
+	<script type="text/javascript">
+		//alert($.param({name:'terry',age:12}));
+		//将post参数json转化为查询字符准格式
+		
+		//axios.defaults.withCredentials = true;//跨域发送cookie问题
+		//基准路径
+		axios.defaults.baseURL="http://47.101.150.92:8989";
+		//axios.defaults.baseURL = "http://134.175.100.63:6677"
+		//状态机
+		let store=new Vuex.Store({
+			state:{
+				visible:false,//控制表单，未来控制模态框
+				customers:[] //遍历需要用到的数据，初始化为null,通过突变改变值
+			},
+			mutations:{
+				showModal(state){
+					state.visible=true;
+				},
+				closeModal(state){
+					state.visible=false;
+				},
+				//need accpeting a param --customers
+				refreshCustomers(state,customers){
+					console.log("state=>",state);
+					state.customers=customers;
+				}
+			},
+			actions:{
+				//asyna  await 异步操作同步化
+				//context=({state,commit,dispatch,getters})
+				async findAllCustomers(context){
+					console.log("context->",context)
+					//查询所有顾客信息
+					let response= await axios.get("/customer/findAll");
+					//将顾客信息设置到state.customers中
+					//console.log(response.data); 
+					context.commit("refreshCustomers",response.data.data);//调用突变中的方法，传实际值
+				},
+				async saveOrUpdateCustomer({dispatch,commit},customer){
+					//调用后台编辑接口
+					let response=await axios({
+						method:"post",
+						url:'/customer/saveOrUpdate',
+						data:$.param(customer),
+						headers:{
+							"Content-Type":"application/x-www-form-urlencoded"
+						}
+					});
+
+					//关闭模态框
+					commit("closeModal");
+					//刷新
+					dispatch("findAllCustomers");
+					//提示成功  react
+					return response;
+
+				},
+				async deleteCustomerById({dispatch},id){
+					//调用后台删除接口
+					let response=await axios.get("/customer/deleteById?id="+id);
+					//重新调用findAllCustomers刷新页面
+					dispatch("findAllCustomers");
+					//提示成功，让Vue去做，并且删除后才能提示
+					return response;
+				}
+			},
+			getters:{
+
+			}
+
+		})
+			//store.dispatch("findAllCustomers");
+			//console.log("customers",store.state.customers);
+		new Vue({
+			el:"#app",
+			data:{
+				form:{}  //添加表单时所用
+			},
+			store,
+			created(){
+				//this.$store.dispatch("findAllCustomers")
+				//避免多次调用麻烦，封装映射到methods中
+				this.findAllCustomers();//调用methods的方法，间接调用状态机中的方法
+			},
+			//计算属性，和普通属性一样使用
+			//映射，将vuex state中的状态映射为vue中属性
+			computed:{
+				//在此处声明遍历的customres,visible否则未定义
+				// customers:function(){
+				// 	return this.$store.state.customers;
+				// },
+				// visible:function(){
+				// 	return this.$store.state.visible;
+				// }
+				...Vuex.mapState(["customers","visible"])
+				//普通属性
+			},
+			methods:{
+			//映射，将vuex action的动作映射为vue中的方法
+			// findAllCustomers(){
+			// 	return this.$store.dispatch("findAllCustomers");
+			// },
+			// //映射，将vuex action的动作映射为vue中的方法
+			// deleteCustomerById(id){
+			// 	return this.$store.dispatch("deleteCustomerById",id);
+			// },
+			...Vuex.mapActions(["findAllCustomers","deleteCustomerById","saveOrUpdateCustomer"]),
+			///映射，将vuex mutation的突变映射为vue中的方法
+			// showModal(){
+			// 	return this.$store.commit("showModal");
+			// },
+			// closeModal(){
+			// 	return this.$store.commit("closeModal");
+			// },
+			...Vuex.mapMutations(["showModal","closeModal"]),
+			//普通方法
+			toAddHandler(){
+				this.form={};
+				//将模态框打开
+				this.showModal();
+			},
+			submitHandler(){
+				//表单验证
+				//提交表单
+				//this.form={};提交了空信息 在模态框清除遗留信息
+				this.saveOrUpdateCustomer(this.form)
+				.then((response)=>{
+					alert(response.data.data);
+				})
+			},
+			deleteHandler(id){
+				let promise=this.deleteCustomerById(id);
+				console.log("promise=>",promise); 
+				//该参数是映射中返回的response值   
+				promise.then((response)=>{
+					alert(response.data.data);
+				});
+			},
+			editHandler(row){
+				//携带数据
+				this.form=row;
+				//将模态框打开
+				this.showModal();
+			},
+			toBatchDeleteHandler(){
+
+			}
+		}
+		})
+		
+	</script>
+</body>
+</html>
